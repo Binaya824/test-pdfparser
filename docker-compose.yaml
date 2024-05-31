@@ -62,7 +62,7 @@ services:
     networks:
       - mjunction
     environment:
-      - NODE_ENV=production
+      # - NODE_ENV=production
       - POSTGRES_DB=mjunction
       - POSTGRES_HOST=postgres
       - POSTGRES_USER=postgres

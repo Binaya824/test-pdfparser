@@ -73,7 +73,7 @@ class PdfTextExtractor {
 
         // Set up the results structure and other flags
         const result = {};
-        let currentPoint = '';
+        let currentPoint = null;
         let tableEncountered = false;
         let clauseStarted = false;
         let stopExtracting = false;
@@ -114,6 +114,70 @@ class PdfTextExtractor {
         for (let i = 0; i < files.length; i += chunkSize) {
             chunkedFiles.push(files.slice(i, i + chunkSize))
         }
+        function restructureObject(parsedTokens) {
+            const output = {};
+            function setNestedProperty(obj, parentToken, remaingToken, currentKey) {
+              console.log("parentToken ------->>>", parentToken, typeof parentToken);
+              console.log("currentKey ------->>>", currentKey);
+              if (remaingToken.length === 1) {
+                obj[parentToken].sub_sequence[remaingToken] = parsedTokens[currentKey];
+              } else {
+                let i = 2;
+                let mObj = obj;
+                let nextCurrentKey;
+                while (true) {
+                  let part = parentToken.slice(i - 2, i);
+                  console.log("part ------->>>", part, typeof part);
+                  console.log(
+                    "remainingTokens ------->>>",
+                    remaingToken,
+                    typeof remaingToken,
+                  );
+          
+                  if (i === parentToken.length) {
+                    break;
+                  }
+                  // console.log("part", part);
+                  mObj = mObj[part].sub_sequence;
+          
+                  i += 2;
+                }
+                console.log("mobj", mObj);
+                // console.log(
+                //   currentKey + remaingToken.pop(),
+                //   "currentKey ------->>>",
+                //   currentKey,
+                // );
+                setNestedProperty(
+                  mObj,
+                  remaingToken[0],
+                  remaingToken.slice(-1),
+                  currentKey,
+                );
+              }
+            }
+            const Toenkeys = Object.keys(parsedTokens);
+            Toenkeys.forEach((key, index) => {
+              if (key == 0) {
+                output["0."] = parsedTokens[key];
+              } else {
+                const tokenParts = key.split(".").reduce((acc, part) => {
+                  if (part) acc.push(part + ".");
+                  return acc;
+                }, []);
+                if (tokenParts.length === 1) {
+                  output[tokenParts[0]] = parsedTokens[key];
+                } else {
+                  const remaingTokens = tokenParts.slice(1, tokenParts.length);
+                  const parentToken = tokenParts.slice(0, -1).join("");
+          
+                  setNestedProperty(output, parentToken, remaingTokens, key);
+                }
+              }
+            });
+            console.log("output", JSON.stringify(output, null, 2));
+            return output;
+          }
 
         extractLoop:
         for (const chunk of chunkedFiles) {
@@ -132,139 +196,72 @@ class PdfTextExtractor {
 
                 const doc = nlp.readDoc(t);
                 const tokens = doc.sentences().out();
+                console.log("tokens" , tokens);
                 let cleanedText = '';
                 let isInsideDoubleHash = false;
                 let ignoreToken = false
                 let tableString = ""
 
                 tokens.forEach((token) => {
-
-                    const tableMatch = token.match(/TABLE/g);
-
-                    let indexOfTableKeyword = token.indexOf("TABLE")
-
-                    if (tableMatch) {
-                        if (indexOfTableKeyword === -1) {
-                            indexOfTableKeyword = token.indexOf("(TABLE)");
-                        }
-                        tableString = token.substring(0, indexOfTableKeyword + 5);
-
-                        tableEncountered = true;
-                    }
-
-                    if (tableEncountered) {
-                        if (clauseStarted && !stopExtracting) {
-                            for (const ch of chunk) {
-                                const regex = /(output\/\d+\/)/;
-                                const match = ch.match(regex);
-                                if (match) {
-                                    const page = match.input
-                                    if (!this.ClausePages.includes(page)) {
-                                        this.ClausePages.push(page);
-                                    }
+                    const separatedToken = token.split('\n');
+                    if (t.match(/Table/) && clauseStarted){
+                        console.log("table occured : &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&7 " , t)
+                        for (const ch of chunk) {
+                            const regex = /(output\/\d+\/)/;
+                            const match = ch.match(regex);
+                            console.log("matched : =======>" , match)
+                            if (match) {
+                                const page = match.input
+                                if (!this.ClausePages.includes(page)) {
+                                    this.ClausePages.push(page);
                                 }
                             }
-
-
                         }
 
-                        if (currentPoint) {
 
-                            result[currentPoint] = tableString.replace("(TABLE", "(TABLE)")
-                        }
-                        currentPoint = "";
-                        cleanedText = "";
-                        tableString = ""
-                        // delete result[currentPoint];
                     }
-
-                    const introductionMatch = token.match(/INTRODUCTION/g);
-
-                    if (introductionMatch) {
+                    
+                    if(token.match(/INTRODUCTION/g)){
+                        console.log("intro matched ***********")
+                        result["0."] = {
+                            content: token,
+                            sub_sequence: {}
+                        }
                         clauseStarted = true;
+                        
                     }
-
-                    const tokenSeparated = token.split("\n");
-
-                    const pointMatch = token.match(
-                        /^(?:\d+(\.\d+)*\.$|\*\*End of Clauses\*\*)$/
-                    );
-
-                    if (pointMatch && !stopExtracting && !isInsideDoubleHash) {
-                        if (Object.hasOwn(result, pointMatch[0])) {
-                            cleanedText = pointMatch[0];
-                            result[currentPoint] = (result[currentPoint] || []).concat(cleanedText);
-                        } else {
-                            tableEncountered = false;
-                            currentPoint = pointMatch[0];
-
-                            result[currentPoint] = "";
+                    
+                    else if(token.match(/\d+(\.\d+)?\./g) && clauseStarted){
+                        const cloggedToken = token.split('\n');
+                        const cloggedOutPoint = cloggedToken.pop();
+                        const cloggedOutText = cloggedToken.length > 1 ? cloggedToken.slice(0 , cloggedToken.length -1).join("") : "";
+                        if(cloggedToken.length > 1){
+                            result[currentPoint].content += " " + cloggedOutText.replace(/##.*?##/g , "");
                         }
-                        // console.log(currentPoint)
-                    } else if (tokenSeparated && !isInsideDoubleHash) {
-                        for (const separatedToken of tokenSeparated) {
-
-                            if (!stopExtracting && clauseStarted && !tableEncountered) {
-                                const validationPoints = this.validate(separatedToken);
-                                if (validationPoints) {
-                                    nonValidatedPoints.push(validationPoints[0]);
-                                }
-                            }
-
-                            let separatedTokenMatch;
-
-                            if (Object.keys(result).length === 1 && Object.values(result)[0] === 'INTRODUCTION ') {
-                                separatedTokenMatch = separatedToken.match(
-                                    /^(?:\d+(\.\d+)*\.$|\*\*End of Clauses\*\*)$/
-                                );
-                            } else {
-                                separatedTokenMatch = separatedToken.match(/^\d+(\.\d+)+(\.)+$|\\End of Clauses\\$/)
-                            }
-
-                            // console.log({ separatedTokenMatch: separatedToken.match(/^\d+(\.\d+)+(\.)+$|\\End of Clauses\\$/) })
-
-                            if (
-                                separatedToken === "**End of Clauses**" ||
-                                separatedToken === "**End of Clauses™**" || separatedToken === "**End of Clauses™*" ||
-                                separatedToken === "“*End of clauses™" || separatedToken === "**¥*% End of clauses ***" || separatedToken === "**¥* End of clauses ***"
-                            ) {
-                                stopExtracting = true;
-                            }
-
-                            if (separatedToken.startsWith("##") && separatedToken.endsWith("#")) {
-                                ignoreToken = true
-                            }
-
-                            if (separatedToken.startsWith("H#") || separatedToken.startsWith("#H#") || separatedToken.startsWith("##")) {
-                                isInsideDoubleHash = !isInsideDoubleHash;
-                            }
-
-                            if (separatedToken.endsWith("#i#") || separatedToken.endsWith("##") || separatedToken.endsWith("#H#")) {
-                                isInsideDoubleHash = !isInsideDoubleHash;
-                                ignoreToken = true
-                            }
-
-                            if (
-                                separatedTokenMatch &&
-                                currentPoint != separatedTokenMatch[0] &&
-                                !stopExtracting
-                            ) {
-                                tableEncountered = false;
-                                currentPoint = separatedTokenMatch[0];
-                                result[currentPoint] = "";
-                            } else if (currentPoint && !stopExtracting && !ignoreToken && !isInsideDoubleHash) {
-                                cleanedText = separatedToken.replace(/\s+/g, " ").trim();
-                                result[currentPoint] += cleanedText + " ";
-                            }
-
-                            ignoreToken = false
-                            if (!clauseStarted) {
-                                delete result[currentPoint];
-                                currentPoint = "";
-                                cleanedText = "";
+                        currentPoint = cloggedOutPoint.replace(/##.*?##/g , "");
+                    }else{
+                        if(result[currentPoint]  && clauseStarted){
+                            result[currentPoint].content += " " + token.replace(/##.*?##/g , "")
+                        }else if(clauseStarted){
+                            result[currentPoint] = {
+                                content: token.replace(/##.*?##/g , ""),
+                                sub_sequence: {}
                             }
                         }
                     }
+
+                    for(const t of separatedToken){
+                        // console.log("separated token :^^^^^^^^^^^^^^^^^^^6" , t)
+                        if (
+                            t === "**End of Clauses**" ||
+                            t === "**End of Clauses™**" || t === "**End of Clauses™*" ||
+                            t === "“*End of clauses™" || t === "**¥*% End of clauses ***" || t === "**¥* End of clauses ***"
+                        ) {
+                            console.log("end occured !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" , t)
+                            clauseStarted = false;
+                        }
+                    }
+                    
 
                     // this.ignoreToken = false
                 });
@@ -279,11 +276,12 @@ class PdfTextExtractor {
                     throw new Error(`Validation error, we found some points which are not allowed i.e ${nonValidatedPoints.join(",")}`);
                 }
 
-                for (const key in result) {
-                    result[key] = result[key].trim();
-                }
+                // for (const key in result) {
+                //     result[key] = result[key].trim();
+                // }
             });
-
+            console.log("result: " , result)
+            // const structuredOutput = restructureObject(result);
             // if (result.hasOwnProperty("1.")) {
             //     // Now, you can also check if the value associated with "1." is "INTRODUCTION"
             //     const ifIntroductionExistsRegex = /INTRODUCTION/g
@@ -315,19 +313,21 @@ class PdfTextExtractor {
             // console.log(`result`, result);
         }
 
+     
 
-        if (result.hasOwnProperty("1.")) {
-            // Now, you can also check if the value associated with "1." is "INTRODUCTION"
-            const ifIntroductionExistsRegex = /INTRODUCTION/g
 
-            const ifIntroductionExists = ifIntroductionExistsRegex.test(result["1."])
+        // if (result.hasOwnProperty("0.")) {
+        //     // Now, you can also check if the value associated with "1." is "INTRODUCTION"
+        //     const ifIntroductionExistsRegex = /INTRODUCTION/g
 
-            if (!ifIntroductionExists) {
-                throw new Error(`Validation error, The first entry should be  '1. INTRODUCTION'`);
-            }
-        } else {
-            throw new Error(`Validation error, the document does not comply with our validation rule.`);
-        }
+        //     const ifIntroductionExists = ifIntroductionExistsRegex.test(result["0."])
+
+        //     if (!ifIntroductionExists) {
+        //         throw new Error(`Validation error, The first entry should be  '1. INTRODUCTION'`);
+        //     }
+        // } else {
+        //     throw new Error(`Validation error, the document does not comply with our validation rule.`);
+        // }
 
         // Process each file
 
@@ -369,6 +369,7 @@ class PdfTextExtractor {
 
             const jsonResponse = await sendJsonRequest({ 'tables': this.ClausePages, 'uuid': uuid, 'type': 'extract_table' }, ws);
             this.ClausePages = [];
+            console.log(JSON.stringify(jsonResponse , null , 2))
             return jsonResponse;
         } catch (error) {
             console.error("Error:", error);
