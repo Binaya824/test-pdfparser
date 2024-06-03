@@ -206,6 +206,7 @@ class PdfTextExtractor {
                     const separatedToken = token.split('\n');
                     if (t.match(/Table/) && clauseStarted){
                         console.log("table occured : &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&7 " , t)
+                        tableEncountered = true;
                         for (const ch of chunk) {
                             const regex = /(output\/\d+\/)/;
                             const match = ch.match(regex);
@@ -221,34 +222,34 @@ class PdfTextExtractor {
 
                     }
                     
-                    if(token.match(/INTRODUCTION/g)){
-                        console.log("intro matched ***********")
-                        result["0."] = {
-                            content: token,
-                            sub_sequence: {}
-                        }
-                        clauseStarted = true;
+                    // if(token.match(/INTRODUCTION/g)){
+                    //     console.log("intro matched ***********")
+                    //     result["0."] = {
+                    //         content: token,
+                    //         sub_sequence: {}
+                    //     }
+                    //     clauseStarted = true;
                         
-                    }
+                    // }
                     
-                    else if(token.match(/\d+(\.\d+)?\./g) && clauseStarted){
-                        const cloggedToken = token.split('\n');
-                        const cloggedOutPoint = cloggedToken.pop();
-                        const cloggedOutText = cloggedToken.length > 1 ? cloggedToken.slice(0 , cloggedToken.length -1).join("") : "";
-                        if(cloggedToken.length > 1){
-                            result[currentPoint].content += " " + cloggedOutText.replace(/##.*?##/g , "");
-                        }
-                        currentPoint = cloggedOutPoint.replace(/##.*?##/g , "");
-                    }else{
-                        if(result[currentPoint]  && clauseStarted){
-                            result[currentPoint].content += " " + token.replace(/##.*?##/g , "")
-                        }else if(clauseStarted){
-                            result[currentPoint] = {
-                                content: token.replace(/##.*?##/g , ""),
-                                sub_sequence: {}
-                            }
-                        }
-                    }
+                    // else if(token.match(/\d+(\.\d+)?\./g) && clauseStarted){
+                    //     const cloggedToken = token.split('\n');
+                    //     const cloggedOutPoint = cloggedToken.pop();
+                    //     const cloggedOutText = cloggedToken.length > 1 ? cloggedToken.slice(0 , cloggedToken.length -1).join("") : "";
+                    //     if(cloggedToken.length > 1){
+                    //         result[currentPoint].content += " " + cloggedOutText.replace(/##.*?##/g , "");
+                    //     }
+                    //     currentPoint = cloggedOutPoint.replace(/##.*?##/g , "");
+                    // }else{
+                    //     if(result[currentPoint]  && clauseStarted){
+                    //         result[currentPoint].content += " " + token.replace(/##.*?##/g , "")
+                    //     }else if(clauseStarted){
+                    //         result[currentPoint] = {
+                    //             content: token.replace(/##.*?##/g , ""),
+                    //             sub_sequence: {}
+                    //         }
+                    //     }
+                    // }
 
                     for(const t of separatedToken){
                         // console.log("separated token :^^^^^^^^^^^^^^^^^^^6" , t)
@@ -260,6 +261,35 @@ class PdfTextExtractor {
                             console.log("end occured !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" , t)
                             clauseStarted = false;
                         }
+                        if(t.match(/INTRODUCTION/g)){
+                            console.log("intro matched ***********")
+                            result["0."] = {
+                                content: token,
+                                sub_sequence: {}
+                            }
+                            clauseStarted = true;
+                            
+                        }
+                        else if(t.match(/\d+(\.\d+)?\./g) && clauseStarted){
+                            // const cloggedToken = t.split('\n');
+                            // const cloggedOutPoint = cloggedToken.pop();
+                            // const cloggedOutText = cloggedToken.length > 1 ? cloggedToken.slice(0 , cloggedToken.length -1).join("") : "";
+                            // if(cloggedToken.length > 1){
+                            //     result[currentPoint].content += " " + cloggedOutText.replace(/##.*?##/g , "");
+                            // }
+                            tableEncountered = false;
+                            currentPoint = t.replace(/##.*?##/g , "");
+                        }else{
+                            if(result[currentPoint]  && clauseStarted){
+                                result[currentPoint].content += " " + t.replace(/##.*?##/g , "")
+                            }else if(clauseStarted){
+                                result[currentPoint] = {
+                                    content: t.replace(/##.*?##/g , ""),
+                                    sub_sequence: {}
+                                }
+                            }
+                        }
+                       
                     }
                     
 
@@ -280,8 +310,8 @@ class PdfTextExtractor {
                 //     result[key] = result[key].trim();
                 // }
             });
-            console.log("result: " , result)
-            // const structuredOutput = restructureObject(result);
+            // console.log("result: " , result)
+            const structuredOutput = restructureObject(result);
             // if (result.hasOwnProperty("1.")) {
             //     // Now, you can also check if the value associated with "1." is "INTRODUCTION"
             //     const ifIntroductionExistsRegex = /INTRODUCTION/g
