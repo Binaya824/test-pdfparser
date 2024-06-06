@@ -191,6 +191,7 @@ class PdfTextExtractor {
             });
 
             const texts = await Promise.all(promises);
+            // console.log("texts" , texts)
 
             texts.forEach((t) => {
 
@@ -200,101 +201,80 @@ class PdfTextExtractor {
                 let cleanedText = '';
                 let isInsideDoubleHash = false;
                 let ignoreToken = false
-                let tableString = ""
+                let tableEncounteredPoint = ""
 
                 tokens.forEach((token) => {
                     const separatedToken = token.split('\n');
-                    if (t.match(/Table/) && clauseStarted){
-                        console.log("table occured : &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&7 " , t)
-                        tableEncountered = true;
-                        for (const ch of chunk) {
-                            const regex = /(output\/\d+\/)/;
-                            const match = ch.match(regex);
-                            console.log("matched : =======>" , match)
-                            if (match) {
-                                const page = match.input
-                                if (!this.ClausePages.includes(page)) {
-                                    this.ClausePages.push(page);
-                                }
-                            }
-                        }
-
-
-                    }
-                    
-                    // if(token.match(/INTRODUCTION/g)){
-                    //     console.log("intro matched ***********")
-                    //     result["0."] = {
-                    //         content: token,
-                    //         sub_sequence: {}
-                    //     }
-                    //     clauseStarted = true;
-                        
-                    // }
-                    
-                    // else if(token.match(/\d+(\.\d+)?\./g) && clauseStarted){
-                    //     const cloggedToken = token.split('\n');
-                    //     const cloggedOutPoint = cloggedToken.pop();
-                    //     const cloggedOutText = cloggedToken.length > 1 ? cloggedToken.slice(0 , cloggedToken.length -1).join("") : "";
-                    //     if(cloggedToken.length > 1){
-                    //         result[currentPoint].content += " " + cloggedOutText.replace(/##.*?##/g , "");
-                    //     }
-                    //     currentPoint = cloggedOutPoint.replace(/##.*?##/g , "");
-                    // }else{
-                    //     if(result[currentPoint]  && clauseStarted){
-                    //         result[currentPoint].content += " " + token.replace(/##.*?##/g , "")
-                    //     }else if(clauseStarted){
-                    //         result[currentPoint] = {
-                    //             content: token.replace(/##.*?##/g , ""),
-                    //             sub_sequence: {}
-                    //         }
-                    //     }
-                    // }
+                   
 
                     for(const t of separatedToken){
                         // console.log("separated token :^^^^^^^^^^^^^^^^^^^6" , t)
-                        if (
-                            t === "**End of Clauses**" ||
-                            t === "**End of Clauses™**" || t === "**End of Clauses™*" ||
-                            t === "“*End of clauses™" || t === "**¥*% End of clauses ***" || t === "**¥* End of clauses ***"
-                        ) {
-                            console.log("end occured !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" , t)
-                            clauseStarted = false;
-                        }
-                        if(t.match(/INTRODUCTION/g)){
-                            console.log("intro matched ***********")
-                            result["0."] = {
-                                content: token,
-                                sub_sequence: {}
+                        if (t.match(/TABLE/) && clauseStarted){
+                            // tableEncountered = true;
+                            tableEncounteredPoint = currentPoint;
+                            console.log("table occured : &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&7 " , t)
+                            for (const ch of chunk) {
+                                const regex = /(output\/\d+\/)/;
+                                const match = ch.match(regex);
+                                // console.log("matched : =======>" , match)
+                                if (match) {
+                                    const page = match.input
+                                    if (!this.ClausePages.includes(page)) {
+                                        this.ClausePages.push(page);
+                                    }
+                                }
                             }
+    
+    
+                        }
+
+                        
+                        if(t.match(/INTRODUCTION/g) && currentPoint === "1."){
+                            console.log("intro matched ***********")
+                            result[currentPoint] = t
+                            // console.log("result : " , result)
                             clauseStarted = true;
                             
                         }
-                        else if(t.match(/\d+(\.\d+)?\./g) && clauseStarted){
-                            // const cloggedToken = t.split('\n');
-                            // const cloggedOutPoint = cloggedToken.pop();
-                            // const cloggedOutText = cloggedToken.length > 1 ? cloggedToken.slice(0 , cloggedToken.length -1).join("") : "";
-                            // if(cloggedToken.length > 1){
-                            //     result[currentPoint].content += " " + cloggedOutText.replace(/##.*?##/g , "");
-                            // }
-                            tableEncountered = false;
-                            currentPoint = t.replace(/##.*?##/g , "");
-                        }else{
+                        if((
+                            t === "**End of Clauses**" ||
+                            t === "**End of Clauses™**" || t === "**End of Clauses™*" ||
+                            t === "“*End of clauses™" || t === "**¥*% End of clauses ***" || t === "**¥* End of clauses ***" || t === "**End of Clauses™**"
+                        )){
+                            console.log("end occured #############################################################################################################################")
+                            clauseStarted = false;
+                            stopExtracting = true;
+                        }
+                        else if(t.match(/^\d+(\.\d+)*\.$/) ){
+                            console.log("digit matched ------------------------>", t)
+                            currentPoint = t;
+                        }else if(clauseStarted){
                             if(result[currentPoint]  && clauseStarted){
-                                result[currentPoint].content += " " + t.replace(/##.*?##/g , "")
+                                result[currentPoint]+= " " + t.replace(/##.*?##/g , "")
+                                console.log("from adding content",currentPoint , "-------------------------------------------------------------------------------------------------------------" , t)
                             }else if(clauseStarted){
-                                result[currentPoint] = {
-                                    content: t.replace(/##.*?##/g , ""),
-                                    sub_sequence: {}
-                                }
+                                result[currentPoint] = t.replace(/##.*?##/g , "")
+                                console.log("from assgining content",currentPoint , "-------------------------------------------------------------------------------------------------------------" , t)
                             }
                         }
                        
                     }
-                    
+                     
 
                     // this.ignoreToken = false
                 });
+                if(tableEncounteredPoint && result[tableEncounteredPoint]){
+                    const text = result[tableEncounteredPoint];
+                    console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" , text)
+                    let indexOfTableKeyword = text.indexOf("TABLE")
+                        if (indexOfTableKeyword === -1) {
+                            indexOfTableKeyword = text.indexOf("(TABLE)");
+                        }
+                        console.log("index of table key word ======================================================" , indexOfTableKeyword)
+                        result[tableEncounteredPoint] = text.substring(0, indexOfTableKeyword + 5);
+                    // result[tableEncounteredPoint] = result[tableEncounteredPoint].slice(0 , match.index)
+                    tableEncountered = "";
+                }
 
                 // if (currentPoint && result[currentPoint]) {
                 //     result[currentPoint] limitedText= result[currentPoint].join(" ");
@@ -310,8 +290,8 @@ class PdfTextExtractor {
                 //     result[key] = result[key].trim();
                 // }
             });
-            // console.log("result: " , result)
-            const structuredOutput = restructureObject(result);
+            console.log("result: " , result)
+            // const structuredOutput = restructureObject(result);
             // if (result.hasOwnProperty("1.")) {
             //     // Now, you can also check if the value associated with "1." is "INTRODUCTION"
             //     const ifIntroductionExistsRegex = /INTRODUCTION/g
