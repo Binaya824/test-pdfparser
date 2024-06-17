@@ -74,7 +74,7 @@ class PdfTextExtractor {
         // Set up the results structure and other flags
         const result = {};
         let currentPoint = null;
-        let tableEncountered = false;
+        let tableIndices = [];
         let clauseStarted = false;
         let stopExtracting = false;
         const nonValidatedPoints = [];
@@ -114,70 +114,6 @@ class PdfTextExtractor {
         for (let i = 0; i < files.length; i += chunkSize) {
             chunkedFiles.push(files.slice(i, i + chunkSize))
         }
-        function restructureObject(parsedTokens) {
-            const output = {};
-            function setNestedProperty(obj, parentToken, remaingToken, currentKey) {
-              console.log("parentToken ------->>>", parentToken, typeof parentToken);
-              console.log("currentKey ------->>>", currentKey);
-              if (remaingToken.length === 1) {
-                obj[parentToken].sub_sequence[remaingToken] = parsedTokens[currentKey];
-              } else {
-                let i = 2;
-                let mObj = obj;
-                let nextCurrentKey;
-                while (true) {
-                  let part = parentToken.slice(i - 2, i);
-                  console.log("part ------->>>", part, typeof part);
-                  console.log(
-                    "remainingTokens ------->>>",
-                    remaingToken,
-                    typeof remaingToken,
-                  );
-          
-                  if (i === parentToken.length) {
-                    break;
-                  }
-                  // console.log("part", part);
-                  mObj = mObj[part].sub_sequence;
-          
-                  i += 2;
-                }
-                console.log("mobj", mObj);
-                // console.log(
-                //   currentKey + remaingToken.pop(),
-                //   "currentKey ------->>>",
-                //   currentKey,
-                // );
-                setNestedProperty(
-                  mObj,
-                  remaingToken[0],
-                  remaingToken.slice(-1),
-                  currentKey,
-                );
-              }
-            }
-            const Toenkeys = Object.keys(parsedTokens);
-            Toenkeys.forEach((key, index) => {
-              if (key == 0) {
-                output["0."] = parsedTokens[key];
-              } else {
-                const tokenParts = key.split(".").reduce((acc, part) => {
-                  if (part) acc.push(part + ".");
-                  return acc;
-                }, []);
-                if (tokenParts.length === 1) {
-                  output[tokenParts[0]] = parsedTokens[key];
-                } else {
-                  const remaingTokens = tokenParts.slice(1, tokenParts.length);
-                  const parentToken = tokenParts.slice(0, -1).join("");
-          
-                  setNestedProperty(output, parentToken, remaingTokens, key);
-                }
-              }
-            });
-            console.log("output", JSON.stringify(output, null, 2));
-            return output;
-          }
 
         extractLoop:
         for (const chunk of chunkedFiles) {
@@ -212,7 +148,12 @@ class PdfTextExtractor {
                         if (t.match(/TABLE/) && clauseStarted){
                             // tableEncountered = true;
                             tableEncounteredPoint = currentPoint;
-                            console.log("table occured : &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&7 " , t)
+                            const elIndex = tableIndices.indexOf(currentPoint);
+                            if(elIndex === -1){
+
+                                tableIndices.push(currentPoint);
+                            }
+                            // console.log("table occured : &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&7 " , t)
                             for (const ch of chunk) {
                                 const regex = /(output\/\d+\/)/;
                                 const match = ch.match(regex);
@@ -231,12 +172,13 @@ class PdfTextExtractor {
                         
                         if(t.match(/INTRODUCTION/g) && currentPoint === "1."){
                             console.log("intro matched ***********")
-                            result[currentPoint] = t
+                            // result[currentPoint] ? null : result[currentPoint] = t;
+                            result[currentPoint] = t;
                             // console.log("result : " , result)
                             clauseStarted = true;
                             
                         }
-                        if((
+                        else if((
                             t === "**End of Clauses**" ||
                             t === "**End of Clauses™**" || t === "**End of Clauses™*" ||
                             t === "“*End of clauses™" || t === "**¥*% End of clauses ***" || t === "**¥* End of clauses ***" || t === "**End of Clauses™**"
@@ -246,68 +188,44 @@ class PdfTextExtractor {
                             stopExtracting = true;
                         }
                         else if(t.match(/^\d+(\.\d+)*\.$/) ){
-                            console.log("digit matched ------------------------>", t)
                             currentPoint = t;
-                        }else if(clauseStarted){
+                        }else {
                             if(result[currentPoint]  && clauseStarted){
                                 result[currentPoint]+= " " + t.replace(/##.*?##/g , "")
-                                console.log("from adding content",currentPoint , "-------------------------------------------------------------------------------------------------------------" , t)
                             }else if(clauseStarted){
                                 result[currentPoint] = t.replace(/##.*?##/g , "")
-                                console.log("from assgining content",currentPoint , "-------------------------------------------------------------------------------------------------------------" , t)
                             }
                         }
                        
                     }
                      
 
-                    // this.ignoreToken = false
                 });
-                if(tableEncounteredPoint && result[tableEncounteredPoint]){
-                    const text = result[tableEncounteredPoint];
-                    console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" , text)
-                    let indexOfTableKeyword = text.indexOf("TABLE")
-                        if (indexOfTableKeyword === -1) {
-                            indexOfTableKeyword = text.indexOf("(TABLE)");
-                        }
-                        console.log("index of table key word ======================================================" , indexOfTableKeyword)
-                        result[tableEncounteredPoint] = text.substring(0, indexOfTableKeyword + 5);
-                    // result[tableEncounteredPoint] = result[tableEncounteredPoint].slice(0 , match.index)
-                    tableEncountered = "";
-                }
-
-                // if (currentPoint && result[currentPoint]) {
-                //     result[currentPoint] limitedText= result[currentPoint].join(" ");
-                // }
-
-                // At the end of processing each file:
+                
                 if (nonValidatedPoints.length) {
                     this.ClausePages = [];
                     throw new Error(`Validation error, we found some points which are not allowed i.e ${nonValidatedPoints.join(",")}`);
                 }
 
-                // for (const key in result) {
-                //     result[key] = result[key].trim();
-                // }
+               
             });
-            console.log("result: " , result)
-            // const structuredOutput = restructureObject(result);
-            // if (result.hasOwnProperty("1.")) {
-            //     // Now, you can also check if the value associated with "1." is "INTRODUCTION"
-            //     const ifIntroductionExistsRegex = /INTRODUCTION/g
+           
+            if (result.hasOwnProperty("1.")) {
+                // Now, you can also check if the value associated with "1." is "INTRODUCTION"
+                const ifIntroductionExistsRegex = /INTRODUCTION/g
 
-            //     const ifIntroductionExists = ifIntroductionExistsRegex.test(result["1."])
+                const ifIntroductionExists = ifIntroductionExistsRegex.test(result["1."])
 
-            //     if (!ifIntroductionExists) {
-            //         throw new Error(`Validation error, The first entry should be  '1. INTRODUCTION'`);
-            //     } 
-            // } else {
-            //     throw new Error(`Validation error, the document does not comply with our validation rule.`);
-            // }
+                if (!ifIntroductionExists) {
+                    throw new Error(`Validation error, The first entry should be  '1. INTRODUCTION'`);
+                } 
+            } else {
+                throw new Error(`Validation error, the document does not comply with our validation rule.`);
+            }
 
             // Process each file
 
-            // Process text from each file
+            // // Process text from each file
             // console.log(this.worker_array,'>>>>>>>>>>>>>>>>>>>>')    
 
             // this.worker_array.forEach((worker)=>{
@@ -317,13 +235,40 @@ class PdfTextExtractor {
             //         console.error(error);
             //     }
             // })
+            console.log("&&^&^&^&^&^&^^&^&^&^&^&^&^&^&^&^&^&^&^&^&^&^&^&^&^&^&^&^&^ table indices" , tableIndices);
+            tableIndices.forEach((index)=> {
+            const text = result[index];
+            console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" , text)
+            let indexOfTableKeyword = text.indexOf("TABLE")
+                if (indexOfTableKeyword === -1) {
+                    indexOfTableKeyword = text.indexOf("(TABLE)");
+                }
+                console.log("index of table key word ======================================================" , indexOfTableKeyword)
+                // const textSeparated = text.split(' ');
+                // textSeparated.forEach((el , index)=>{
+                //     console.log("element $$$$$$$$$$$$$$$$$" , el)
+                // })
+
+                const referLinkIndex = text.indexOf("*")
+                console.log("referLinkIndex-------------------------->>>>>>>>>>>>>>>"  , referLinkIndex)
+                const referedContent = text.substring(referLinkIndex , text.length);
+                console.log("refered content ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" , referedContent)
+                // .concat(' ', referedContent);
+                if(referLinkIndex != -1){
+                    result[index] = text.substring(0, indexOfTableKeyword + 5).concat(" " , referedContent)
+                }else{
+
+                    result[index] = text.substring(0, indexOfTableKeyword + 5)
+                }
+            })
+            console.log("result: " , result)
             if (ws != '') {
                 ws.send(JSON.stringify({ type: 'progress_data', data: result }));
             }
             // console.log(`result`, result);
         }
 
-     
+        
 
 
         // if (result.hasOwnProperty("0.")) {
